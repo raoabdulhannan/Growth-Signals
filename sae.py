@@ -43,7 +43,7 @@ class SAE(nn.Module):
 def loss_function(reconstructed, original, encoded, model):
     # Alternate approach is MAE, which is more robust to outliers but less used in the literature 
     mse_loss = nn.MSELoss()(reconstructed, original)
-    kl_loss = model.kl_divergence(encoded)
+    kl_loss = model.l1_loss_function(encoded)
     return mse_loss + kl_loss
 
 
