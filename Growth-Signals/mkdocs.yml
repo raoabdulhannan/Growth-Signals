@@ -1,0 +1,52 @@
+site_name: Growth-Signals
+repo_url: https://github.com/AnanyaHN27/Growth-Signals
+site_url: https://AnanyaHN27.github.io/Growth-Signals
+site_description: CMU x Growth Signals Capstone
+site_author: Ananya Hari Narain
+edit_uri: edit/main/docs/
+repo_name: AnanyaHN27/Growth-Signals
+copyright: Maintained by <a href="https://AnanyaHN27.com">AnanyaHN27</a>.
+
+nav:
+  - Home: index.md
+  - Modules: modules.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["growth_signals"]
+theme:
+  name: material
+  feature:
+    tabs: true
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AnanyaHN27/Growth-Signals
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/Growth-Signals
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
