@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.utils.data.DataLoader as DataLoader
 
 
 class SAE(nn.Module):
@@ -45,32 +43,3 @@ def loss_function(reconstructed, original, encoded, model):
     mse_loss = nn.MSELoss()(reconstructed, original)
     kl_loss = model.l1_loss_function(encoded)
     return mse_loss + kl_loss
-
-
-input_dim = 768
-hidden_dim = 128
-batch_size = 32
-epochs = 10
-lr = 0.001
-
-model = SAE(input_dim, hidden_dim)
-optimizer = optim.Adam(model.parameters(), lr=lr)
-
-# Using dummy data as interim solution- waiting for real data
-dummy_data = torch.randn(1000, input_dim)
-dataloader = DataLoader(dummy_data, batch_size=batch_size, shuffle=True)
-
-for epoch in range(epochs):
-    total_loss = 0
-    for batch in dataloader:
-        optimizer.zero_grad()
-        reconstructed, encoded = model(batch)
-
-        loss = loss_function(reconstructed, batch, encoded, model)
-
-        loss.backward()
-        optimizer.step()
-
-        total_loss += loss.item()
-
-    print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss / len(dataloader)}")
