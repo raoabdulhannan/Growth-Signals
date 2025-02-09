@@ -1,11 +1,10 @@
 site_name: Growth-Signals
-repo_url: https://github.com/AnanyaHN27/Growth-Signals
-site_url: https://AnanyaHN27.github.io/Growth-Signals
+repo_url: https://github.com/raoabdulhannan/Growth-Signals
 site_description: CMU x Growth Signals Capstone
-site_author: Ananya Hari Narain
+site_author: Ananya Hari Narain, Rao Abdul Hannan, Amy Ke, Yahan Yang
 edit_uri: edit/main/docs/
-repo_name: AnanyaHN27/Growth-Signals
-copyright: Maintained by <a href="https://AnanyaHN27.com">AnanyaHN27</a>.
+repo_name: raoabdulhannan/Growth-Signals
+copyright: Maintained by <a href="https://ananyahn27.github.io/">AnanyaHN27</a>.
 
 nav:
   - Home: index.md
@@ -41,7 +40,7 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/AnanyaHN27/Growth-Signals
+      link: https://github.com/raoabdulhannan/Growth-Signals
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/Growth-Signals
 
