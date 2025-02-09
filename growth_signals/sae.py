@@ -3,10 +3,12 @@ import torch.nn as nn
 
 
 class SAE(nn.Module):
-    def __init__(self, input_dim, hidden_dim, lambda_coef):
+    def __init__(self, input_dim, hidden_dim, lambda_coef, decoder_activation):
         super(SAE, self).__init__()
         self.encoder = self.encoder_initialize(input_dim, hidden_dim)
-        self.decoder = self.decoder_initialize(input_dim, hidden_dim)
+        self.decoder = self.decoder_initialize(
+            input_dim, hidden_dim, decoder_activation
+            )
         self.lambda_coef = lambda_coef
 
     def encoder_initialize(self, input_dim, hidden_dim):
@@ -15,9 +17,18 @@ class SAE(nn.Module):
         encoder = nn.Sequential(linear, relu)
         return encoder
 
-    def decoder_initialize(self, input_dim, hidden_dim):
+    def decoder_initialize(self, input_dim, hidden_dim, decoder_activation):
         linear = nn.Linear(hidden_dim, input_dim)
-        return nn.Sequential(linear)
+        if decoder_activation == "sigmoid":
+            activation = nn.Sigmoid()
+        elif decoder_activation == "tanh":
+            activation = nn.Tanh()
+        elif decoder_activation == "identity":
+            activation = nn.Identity()
+        else:
+            raise ValueError(f"Unsupported activation: {decoder_activation}")
+
+        return nn.Sequential(linear, activation)
 
     def forward(self, x):
         encoded = self.encoder(x)
