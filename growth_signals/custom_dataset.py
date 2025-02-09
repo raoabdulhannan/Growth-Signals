@@ -1,5 +1,4 @@
 from datasets import load_dataset
-from tqdm import tqdm
 from constants import EMBEDDING_DIM
 import torch
 
