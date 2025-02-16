@@ -1,5 +1,6 @@
 from tqdm import tqdm
 from constants import EPOCHS
+from plot import plot_dead_latents
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sae import SAE, loss_function
@@ -7,6 +8,7 @@ import torch
 from dataset import CustomDataset
 from skopt import gp_minimize
 from skopt.space import Integer, Real, Categorical
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -76,8 +78,12 @@ model = SAE(
 
 optimizer = optim.Adam(model.parameters(), lr=best_config["learning_rate"])
 
+dead_latents_per_epoch = []
+latent_activation_distribution = []
+
 for epoch in range(EPOCHS):
     total_loss = 0
+    activations = []
     for batch in tqdm(data_loader, desc=f"Epoch {epoch+1}/{EPOCHS}"):
         batch = batch.to(device)
         optimizer.zero_grad()
@@ -89,4 +95,12 @@ for epoch in range(EPOCHS):
         optimizer.step()
         total_loss += loss.item()
 
+        activations.append(encoded.detach().cpu().numpy())
+        dead_latents = np.sum(activations == 0, axis=0) == activations.shape[0]
+        num_dead_latents = np.sum(dead_latents)
+
+        dead_latents_per_epoch.append(num_dead_latents)
+        latent_activation_distribution.append(np.sum(activations > 0, axis=1))
+    plot_dead_latents(dead_latents_per_epoch=dead_latents_per_epoch)
+    activations = np.concatenate(activations, axis=0)
     print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {total_loss / len(data_loader)}")
