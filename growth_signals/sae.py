@@ -5,10 +5,11 @@ import torch.nn as nn
 class SAE(nn.Module):
     def __init__(self, input_dim, hidden_dim, lambda_coef, decoder_activation):
         super(SAE, self).__init__()
-        self.encoder = self.encoder_initialize(input_dim, hidden_dim)
-        self.decoder = self.decoder_initialize(
-            input_dim, hidden_dim, decoder_activation
-            )
+        self.encoder = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.ReLU())
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim, input_dim),
+            {"sigmoid": nn.Sigmoid(), "tanh": nn.Tanh(), "identity": nn.Identity()}[decoder_activation]
+        )
         self.lambda_coef = lambda_coef
 
     def encoder_initialize(self, input_dim, hidden_dim):

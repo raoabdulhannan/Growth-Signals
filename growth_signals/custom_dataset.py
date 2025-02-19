@@ -1,32 +1,35 @@
 from datasets import load_dataset
-from constants import EMBEDDING_DIM
+from constants import EMBEDDING_DIM, BATCH_SIZE
 import torch
+import numpy as np
 
-
-class CustomDataset():
+class CustomDataset(torch.utils.data.IterableDataset):
     def __init__(self, path="Cohere/wikipedia-22-12-en-embeddings"):
-        self.data = load_dataset(path, split="train[:1%]", streaming=True)
-        # TODO: Get only titles related to physics
-        num_samples = int(0.001 * len(self.data))
-        self.data = self.data.shuffle(seed=42) \
-            .select(range(num_samples))
-
+        print("Loading data")
+        self.data_iter = load_dataset(path, split="train", streaming=True).shuffle(seed=42)
+        print("Loaded and shuffled dataset")
         self.embedding_dim = EMBEDDING_DIM
-        self.embeddings = torch.tensor(
-            [self.pad_or_truncate(d['emb']) for d in self.data],
-            dtype=torch.float32
-        )
-        self.texts = self.data['text']
+        self.batch_size = BATCH_SIZE
 
-    def __len__(self):
-        return len(self.embeddings)
+    def process_batch(self, batch):
+        batch_size = len(batch)
+        embeddings = np.zeros((batch_size, self.embedding_dim), dtype=np.float32)
+        texts = []
 
-    def __getitem__(self, idx):
-        return self.embeddings[idx]
+        for i, d in enumerate(batch):
+            emb = np.array(d['emb'], dtype=np.float32)
+            length = min(len(emb), self.embedding_dim)
+            embeddings[i, :length] = emb[:length]
+            texts.append(d['text'])
 
-    def pad_or_truncate(self, embedding):
-        if len(embedding) < self.embedding_dim:
-            return embedding + [0.0] * (self.embedding_dim - len(embedding))
-        elif len(embedding) > self.embedding_dim:
-            return embedding[:self.embedding_dim]
-        return embedding
+        return torch.tensor(embeddings), texts
+
+    def __iter__(self):
+        batch = []
+        for d in self.data_iter:
+            batch.append(d)
+            if len(batch) == self.batch_size:
+                yield self.process_batch(batch)
+                batch = []
+        if batch:
+            yield self.process_batch(batch)
