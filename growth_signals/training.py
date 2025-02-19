@@ -100,7 +100,6 @@ def main():
         activations = []
 
         for batch in tqdm(data_loader, desc=f"Epoch {epoch+1}/{EPOCHS}", leave=False):
-            print(batch)
             
             batch_embeddings = batch
             batch_embeddings = batch_embeddings.to(device)
