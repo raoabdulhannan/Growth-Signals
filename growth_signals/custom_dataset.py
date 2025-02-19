@@ -3,10 +3,11 @@ from constants import EMBEDDING_DIM, BATCH_SIZE
 import torch
 import numpy as np
 
-class CustomDataset(torch.utils.data.IterableDataset):
+class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, path="Cohere/wikipedia-22-12-en-embeddings"):
         print("Loading data")
-        self.data_iter = load_dataset(path, split="train", streaming=True).shuffle(seed=42)
+        self.data_iter = load_dataset(path, split="train", streaming=False).shuffle(seed=42)
+        self.data_iter = self.data_iter.select(range(1000))
         print("Loaded and shuffled dataset")
         self.embedding_dim = EMBEDDING_DIM
         self.batch_size = BATCH_SIZE
@@ -33,3 +34,14 @@ class CustomDataset(torch.utils.data.IterableDataset):
                 batch = []
         if batch:
             yield self.process_batch(batch)
+
+    def __getitem__(self, index):
+        sample = self.data_iter[index]
+
+        # Extract only the embedding
+        embedding = torch.tensor(sample['emb'], dtype=torch.float32)
+
+        return embedding
+
+    def __len__(self):
+        return len(self.data_iter)
