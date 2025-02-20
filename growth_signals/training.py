@@ -50,7 +50,7 @@ def main():
     print("\n Training Final Model with Best Hyperparameters")
 
 
-    log_dir = "./logs"
+    # log_dir = "./logs_tensorboard"
 
     # # Delete old logs before starting training
     # if os.path.exists(log_dir):
@@ -62,7 +62,7 @@ def main():
 
     # # Start TensorBoard
     # tensorboard_process = subprocess.Popen(
-    #     ["tensorboard", "--logdir", "./logs", "--port", "6006"],
+    #     ["tensorboard", "--logdir", log_dir, "--port", "6006"],
     #     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     # )
     # subprocess.Popen(["xdg-open", "http://localhost:6006"],
@@ -125,6 +125,7 @@ def main():
             latent_activation_distribution.append(np.sum(activs > 0, axis=1))
             # Log loss per batch
             # writer.add_scalar("Reconstruction Loss", loss.item(), step)
+            # writer.flush()
             step += 1
         # writer.flush()
         plot_dead_latents(dead_latents_per_epoch=dead_latents_per_epoch)
