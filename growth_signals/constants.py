@@ -1,5 +1,5 @@
 INPUT_DIM = 768
-HIDDEN_DIM = 128  # TODO: optimize this with hyperparameter tuning
+HIDDEN_DIM = 2304
 BATCH_SIZE = 128
 EPOCHS = 10
 LR = 0.001

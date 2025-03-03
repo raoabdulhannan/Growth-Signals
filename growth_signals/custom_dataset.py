@@ -38,10 +38,10 @@ class CustomDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         sample = self.data_iter[index]
 
-        # Extract only the embedding
         embedding = torch.tensor(sample['emb'], dtype=torch.float32)
+        texts = sample['text']
 
-        return embedding
+        return embedding, texts
 
     def __len__(self):
         return len(self.data_iter)

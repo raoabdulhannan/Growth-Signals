@@ -122,7 +122,7 @@ def main():
         input_dim=768,
         hidden_dim=HIDDEN_DIM,
         lambda_coef=0.1,
-        decoder_activation="tanh"
+        decoder_activation="sigmoid"
     ).to(device)
     
     model = torch.compile(model)  # Optimize execution
@@ -140,7 +140,8 @@ def main():
         epoch_losses = []
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}", leave=False):
-            batch_embeddings = batch.to(device)
+            batch_embeddings, batch_texts = batch
+            batch_embeddings = batch_embeddings.to(device)
             optimizer.zero_grad()
 
             encoded, decoded = model(batch_embeddings)
