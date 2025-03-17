@@ -1,4 +1,4 @@
-# From https://github.com/Christine8888/saerch/blob/main/saerch/autointerp.py
+# Modified from https://github.com/Christine8888/saerch/blob/main/saerch/autointerp.py
 import argparse
 import json
 import logging
@@ -13,8 +13,6 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 # Constants
-CONFIG_PATH = Path("../config.yaml")
-DATA_DIR = Path("../data")
 SAE_DATA_DIR = Path("sae_data_astroPH")
 
 # Model: DeepSeek-LLM-7B-Chat
@@ -34,7 +32,7 @@ class NeuronAnalyzer:
     AUTOINTERP_PROMPT = """
 You are a meticulous AI and astronomy researcher conducting an important
 investigation into a certain neuron in a language model trained on
-astrophysics papers. Your task is to figure out what sort of behaviour
+Wikipedia papers. Your task is to figure out what sort of behaviour
 this neuron is responsible for -- namely, on what general concepts, features,
 topics does this neuron fire? Here's how you'll complete the task:
 
@@ -155,6 +153,10 @@ the neuron will activate on this abstract.
         return topk_indices, topk_values
 
     def load_abstract_texts(self) -> Dict:
+        # TODO: Take the abstracts used in the training/test/val set and map 
+        train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+        
+        train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=4, persistent_workers=True)
         with open(DATA_DIR / "vector_store/abstract_texts.json", 'r') as f:
             return json.load(f)
 
