@@ -16,6 +16,16 @@ from plot import plot_dead_latents
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
+
+"""
+For running Visdom:
+1. Install: pip install visdom
+2. Run: python -m visdom.server in a separate terminal
+3. Run the current script
+(vis = visdom.Visdom(port=8097) will connect to the server you opened in step 2)
+(All required code are already uncommented)
+"""
+
 def save_model_checkpoint(epoch, model, optimizer, dataset_size, save_dir='./models'):
     os.makedirs(save_dir, exist_ok=True)
     filename = os.path.join(save_dir, f'{epoch}_{dataset_size}.pth')
