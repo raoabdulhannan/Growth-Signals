@@ -7,6 +7,9 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
 import visdom
 import requests
+import heapq
+import json
+import gc
 
 from constants import HIDDEN_DIM, INPUT_DIM, BATCH_SIZE, EMBEDDING_DIM, EPOCHS, LR
 from custom_dataset import CustomDataset
@@ -48,6 +51,85 @@ def save_model_checkpoint(epoch, model, optimizer, dataset_size, save_dir='./mod
 #             print("Waiting for Visdom server...")
 #             time.sleep(1)
 
+
+# Function for saving data required for automated interpretability
+def save_sae_data_for_interpretability(model, dataset, device, k=16, feature_count=None, save_dir='./sae_data'):
+    os.makedirs(save_dir, exist_ok=True)
+    
+    if feature_count is None:
+        feature_count = model.encoder[0].out_features
+    
+    topk_indices = np.zeros((feature_count, k), dtype=np.int32)
+    topk_values = np.zeros((feature_count, k), dtype=np.float32)
+    
+    data_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=BATCH_SIZE, shuffle=False, 
+        num_workers=4, persistent_workers=True, pin_memory=True
+    )
+    
+    doc_ids = []
+    abstracts = []
+    titles = []
+    
+    feature_heaps = [[] for _ in range(feature_count)]
+    
+    print("Collecting feature activations for interpretability...")
+    global_idx = 0
+    model.eval()
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(tqdm(data_loader, desc="Processing batches")):
+            batch_embeddings, batch_texts, batch_titles = batch
+            batch_embeddings = batch_embeddings.to(device, non_blocking=True)
+            
+            encoded, _ = model(batch_embeddings)
+            encoded_np = encoded.cpu().numpy()
+            
+            for i, (emb, text, title) in enumerate(zip(encoded_np, batch_texts, batch_titles)):
+                doc_ids.append(global_idx)
+                abstracts.append(text)
+                titles.append(title)
+                
+                for feature_idx in range(feature_count):
+                    activation = emb[feature_idx]
+                    
+                    if len(feature_heaps[feature_idx]) < k:
+                        heapq.heappush(feature_heaps[feature_idx], (activation, global_idx))
+                    elif activation > feature_heaps[feature_idx][0][0]:
+                        heapq.heappushpop(feature_heaps[feature_idx], (activation, global_idx))
+                
+                global_idx += 1
+    
+    for feature_idx in range(feature_count):
+        sorted_activations = sorted(feature_heaps[feature_idx], reverse=True)
+        
+        for k_idx, (value, idx) in enumerate(sorted_activations):
+            topk_indices[feature_idx, k_idx] = idx
+            topk_values[feature_idx, k_idx] = value
+    
+    print(f"Saving SAE data to {save_dir}...")
+    np.save(os.path.join(save_dir, f"topk_indices_{k}_{feature_count}.npy"), topk_indices)
+    np.save(os.path.join(save_dir, f"topk_values_{k}_{feature_count}.npy"), topk_values)
+    
+    with open(os.path.join(save_dir, "abstract_texts.json"), 'w') as f:
+        json.dump({"doc_ids": doc_ids, "abstracts": abstracts, "titles": titles}, f)
+    
+    print("SAE data saved successfully!")
+
+
+def cleanup_gpu_memory():
+    print("\nCleaning up GPU memory...")
+    
+    gc.collect()
+    
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        
+        allocated = torch.cuda.memory_allocated(0) / (1024 ** 3)
+        reserved = torch.cuda.memory_reserved(0) / (1024 ** 3)
+        print(f"GPU memory after cleanup: {allocated:.2f} GB allocated, {reserved:.2f} GB reserved")
+    
+    print("Cleanup complete")
+
 def main():
     print("\nTraining Final Model with Best Hyperparameters")
     
@@ -66,7 +148,7 @@ def main():
     #               xlabel='Epoch', ylabel='Number of Dead Latents')
     # )
     
-    dataset = CustomDataset()
+    dataset = CustomDataset(num_rows=1000000, shuffle=False)  # Default values: 100000 rows, no shuffling
     
     # Split dataset into train/validation/test sets
     train_size = int(0.7 * len(dataset))
@@ -103,11 +185,11 @@ def main():
         epoch_losses = []
         epoch_encoded_tensors = []
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}", leave=False):
-            batch_embeddings, _ = batch
+            batch_embeddings, _, _ = batch
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             optimizer.zero_grad()
 
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'): # Changed from torch.cuda.amp.autocast()
                 encoded, decoded = model(batch_embeddings)
                 loss = loss_function(decoded, batch_embeddings, encoded, model)
             
@@ -162,7 +244,7 @@ def main():
     val_loss = 0.0
     with torch.no_grad():
         for batch in tqdm(val_loader, desc="Validation"):
-            batch_embeddings, _ = batch
+            batch_embeddings, _, _ = batch
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             encoded, decoded = model(batch_embeddings)
             loss = loss_function(decoded, batch_embeddings, encoded, model)
@@ -173,12 +255,22 @@ def main():
     test_loss = 0.0
     with torch.no_grad():
         for batch in tqdm(test_loader, desc="Test"):
-            batch_embeddings, _ = batch
+            batch_embeddings, _, _ = batch
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             encoded, decoded = model(batch_embeddings)
             loss = loss_function(decoded, batch_embeddings, encoded, model)
             test_loss += loss.item()
     print(f"Test Loss: {test_loss / len(test_loader)}")
+
+    print("\nSaving SAE data for interpretability...")
+    save_sae_data_for_interpretability(
+        model=model, 
+        dataset=dataset,
+        device=device, 
+        k=16,  # Top k examples saved per feature
+        feature_count=HIDDEN_DIM,  # Total feature count
+        save_dir='./sae_data'
+    )
 
 
 if __name__ == "__main__":
