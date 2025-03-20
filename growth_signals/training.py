@@ -53,14 +53,20 @@ def save_model_checkpoint(epoch, model, optimizer, dataset_size, save_dir='./mod
 
 
 # Function for saving data required for automated interpretability
-def save_sae_data_for_interpretability(model, dataset, device, k=16, feature_count=None, save_dir='./sae_data'):
+def save_sae_data_for_interpretability(model, dataset, device, top_k=10, zero_k=20, random_k=10, feature_count=None, save_dir='./sae_data'):
     os.makedirs(save_dir, exist_ok=True)
     
     if feature_count is None:
         feature_count = model.encoder[0].out_features
     
-    topk_indices = np.zeros((feature_count, k), dtype=np.int32)
-    topk_values = np.zeros((feature_count, k), dtype=np.float32)
+    topk_indices = np.zeros((feature_count, top_k), dtype=np.int32)
+    topk_values = np.zeros((feature_count, top_k), dtype=np.float32)
+    
+    zero_indices = np.zeros((feature_count, zero_k), dtype=np.int32)
+    zero_similarities = np.zeros((feature_count, zero_k), dtype=np.float32)
+    
+    random_indices = np.zeros((feature_count, random_k), dtype=np.int32)
+    random_values = np.zeros((feature_count, random_k), dtype=np.float32)
     
     data_loader = torch.utils.data.DataLoader(
         dataset, batch_size=BATCH_SIZE, shuffle=False, 
@@ -70,8 +76,10 @@ def save_sae_data_for_interpretability(model, dataset, device, k=16, feature_cou
     doc_ids = []
     abstracts = []
     titles = []
+    embeddings = []
     
     feature_heaps = [[] for _ in range(feature_count)]
+    feature_activations = {i: [] for i in range(feature_count)}
     
     print("Collecting feature activations for interpretability...")
     global_idx = 0
@@ -84,31 +92,97 @@ def save_sae_data_for_interpretability(model, dataset, device, k=16, feature_cou
             encoded, _ = model(batch_embeddings)
             encoded_np = encoded.cpu().numpy()
             
-            for i, (emb, text, title) in enumerate(zip(encoded_np, batch_texts, batch_titles)):
+            for i, (emb, text, title, orig_emb) in enumerate(zip(encoded_np, batch_texts, batch_titles, batch_embeddings.cpu().numpy())):
                 doc_ids.append(global_idx)
                 abstracts.append(text)
                 titles.append(title)
+                embeddings.append(orig_emb)
                 
                 for feature_idx in range(feature_count):
                     activation = emb[feature_idx]
+                    feature_activations[feature_idx].append((activation, global_idx))
                     
-                    if len(feature_heaps[feature_idx]) < k:
+                    if len(feature_heaps[feature_idx]) < top_k:
                         heapq.heappush(feature_heaps[feature_idx], (activation, global_idx))
                     elif activation > feature_heaps[feature_idx][0][0]:
                         heapq.heappushpop(feature_heaps[feature_idx], (activation, global_idx))
                 
                 global_idx += 1
     
-    for feature_idx in range(feature_count):
+    embeddings = np.array(embeddings)
+    
+    print("Finding low-activating and random examples...")
+    for feature_idx in tqdm(range(feature_count), desc="Processing features"):
+
         sorted_activations = sorted(feature_heaps[feature_idx], reverse=True)
         
         for k_idx, (value, idx) in enumerate(sorted_activations):
             topk_indices[feature_idx, k_idx] = idx
             topk_values[feature_idx, k_idx] = value
+        
+        top_indices = [idx for _, idx in sorted_activations]
+        top_embeddings = embeddings[top_indices]
+        
+        norms = np.linalg.norm(top_embeddings, axis=1, keepdims=True)
+        normalized_embeddings = top_embeddings / norms
+        
+        mean_embedding = np.mean(normalized_embeddings, axis=0)
+        mean_embedding = mean_embedding / np.linalg.norm(mean_embedding)
+        
+        all_activations = [(act, idx) for act, idx in feature_activations[feature_idx]]
+        
+        sorted_by_activation = sorted(all_activations)
+        
+        exact_zeros = [(act, idx) for act, idx in all_activations if act == 0]
+        if len(exact_zeros) > 0:
+            print(f"Feature {feature_idx} has {len(exact_zeros)} exact zero activations")
+        
+        zero_act_pairs = sorted_by_activation[:zero_k * 3]
+        
+        if len(zero_act_pairs) > zero_k:
+            indices = np.random.choice(len(zero_act_pairs), size=zero_k, replace=False)
+            zero_act_pairs = [zero_act_pairs[i] for i in indices]
+            
+        zero_act_indices = [idx for _, idx in zero_act_pairs]
+        
+        zero_act_embeddings = embeddings[zero_act_indices]
+        norms = np.linalg.norm(zero_act_embeddings, axis=1, keepdims=True)
+        normalized_embeddings = zero_act_embeddings / norms
+        
+        similarities = np.dot(normalized_embeddings, mean_embedding)
+        
+        sorted_indices = np.argsort(-similarities)
+        
+        for idx, sim_idx in enumerate(sorted_indices):
+            if idx < zero_k:
+                zero_indices[feature_idx, idx] = zero_act_indices[sim_idx]
+                zero_similarities[feature_idx, idx] = similarities[sim_idx]
+        
+        avg_activation = np.mean([act for act, _ in all_activations if act > 0])
+        non_zero_pairs = [(act, idx) for act, idx in all_activations 
+                          if act > avg_activation * 0.5 and idx not in top_indices]
+        
+        if len(non_zero_pairs) < random_k:
+            print(f"Warning: Only {len(non_zero_pairs)} significant non-zero activating examples found for feature {feature_idx}")
+            non_zero_pairs = [(act, idx) for act, idx in all_activations 
+                             if act > 0 and idx not in top_indices]
+            
+        if len(non_zero_pairs) > 0:
+            random_samples = np.random.choice(len(non_zero_pairs), size=min(random_k, len(non_zero_pairs)), replace=False)
+            for idx, sample_idx in enumerate(random_samples):
+                act, doc_idx = non_zero_pairs[sample_idx]
+                random_indices[feature_idx, idx] = doc_idx
+                random_values[feature_idx, idx] = act
+        else:
+            print(f"Warning: No positive activating examples found for feature {feature_idx} beyond top-k")
     
     print(f"Saving SAE data to {save_dir}...")
-    np.save(os.path.join(save_dir, f"topk_indices_{k}_{feature_count}.npy"), topk_indices)
-    np.save(os.path.join(save_dir, f"topk_values_{k}_{feature_count}.npy"), topk_values)
+    np.save(os.path.join(save_dir, f"topk_indices_{top_k}_{feature_count}.npy"), topk_indices)
+    np.save(os.path.join(save_dir, f"topk_values_{top_k}_{feature_count}.npy"), topk_values)
+    np.save(os.path.join(save_dir, f"zero_indices_{zero_k}_{feature_count}.npy"), zero_indices)
+    np.save(os.path.join(save_dir, f"zero_similarities_{zero_k}_{feature_count}.npy"), zero_similarities)
+    np.save(os.path.join(save_dir, f"random_indices_{random_k}_{feature_count}.npy"), random_indices)
+    np.save(os.path.join(save_dir, f"random_values_{random_k}_{feature_count}.npy"), random_values)
     
     with open(os.path.join(save_dir, "abstract_texts.json"), 'w') as f:
         json.dump({"doc_ids": doc_ids, "abstracts": abstracts, "titles": titles}, f)
@@ -148,7 +222,7 @@ def main():
     #               xlabel='Epoch', ylabel='Number of Dead Latents')
     # )
     
-    dataset = CustomDataset(num_rows=1000000, shuffle=False)  # Default values: 100000 rows, no shuffling
+    dataset = CustomDataset(num_rows=100000, shuffle=False)  # Default values: 100000 rows, no shuffling
     
     # Split dataset into train/validation/test sets
     train_size = int(0.7 * len(dataset))
@@ -267,8 +341,10 @@ def main():
         model=model, 
         dataset=dataset,
         device=device, 
-        k=16,  # Top k examples saved per feature
-        feature_count=HIDDEN_DIM,  # Total feature count
+        top_k=10,
+        zero_k=20,
+        random_k=10,
+        feature_count=HIDDEN_DIM,
         save_dir='./sae_data'
     )
 
