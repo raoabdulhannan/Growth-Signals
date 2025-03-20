@@ -5,7 +5,7 @@ import torch.nn as nn
 class SAE(nn.Module):
     def __init__(self, input_dim, hidden_dim, lambda_coef, decoder_activation, device=None):
         super(SAE, self).__init__()
-        self.device = device if device is not None else torch.device("cuda" if torch.cpu.is_available() else "cpu")
+        self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.encoder = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.ReLU())
         self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, input_dim),
@@ -54,6 +54,6 @@ class SAE(nn.Module):
 
 def loss_function(reconstructed, original, encoded, model):
     # Alternate approach is MAE, which is more robust to outliers but less used in the literature 
-    mse_loss = nn.MSELoss()(reconstructed, original)
+    mse_loss = nn.MSELoss()(reconstructed, original) / original.shape[1]
     kl_loss = model.l1_loss_function(encoded)
     return mse_loss + kl_loss
