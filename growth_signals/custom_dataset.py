@@ -7,12 +7,12 @@ class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, path="Cohere/wikipedia-22-12-en-embeddings"):
         print("Loading data")
         self.dataset = load_dataset(path, split="train", streaming=False)
-        self.dataset = self.dataset.shuffle(seed=42)
+        # self.dataset = self.dataset.shuffle(seed=42)
         self.dataset = self.dataset.select(range(100000))
         print("Loaded and shuffled dataset")
         self.embedding_dim = EMBEDDING_DIM
         self.batch_size = BATCH_SIZE
-        self.dataset.set_format(type="numpy", columns=["emb", "text"])
+        self.dataset.set_format(type="numpy", columns=["emb", "text", "title"])
 
     def process_batch(self, batch):
         embeddings_list = [
@@ -46,7 +46,8 @@ class CustomDataset(torch.utils.data.Dataset):
             emb = emb[:self.embedding_dim]
         embedding = torch.from_numpy(emb.astype(np.float32))
         text = sample['text']
-        return embedding, text
+        title = sample['title']
+        return embedding, text, title
 
     def __len__(self):
         return len(self.dataset)
