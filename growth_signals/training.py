@@ -11,11 +11,13 @@ import heapq
 import json
 import gc
 
-from constants import HIDDEN_DIM, INPUT_DIM, BATCH_SIZE, EMBEDDING_DIM, EPOCHS, LR
+from constants import HIDDEN_DIM, INPUT_DIM, BATCH_SIZE, EMBEDDING_DIM, EPOCHS, LR, LAMBDA, SPARSITY_START_EPOCH
+from plot_latent_space import plot_re_ranked_vectors
 from custom_dataset import CustomDataset
-from sae import SAE, loss_function
+from sae import SAE, loss_function, reward_function
 from plot import plot_dead_latents
 
+USE_REWARD = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
@@ -263,78 +265,101 @@ def main():
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             optimizer.zero_grad()
 
-            with torch.amp.autocast('cuda'): # Changed from torch.cuda.amp.autocast()
+            with torch.amp.autocast('cuda'):
                 encoded, decoded = model(batch_embeddings)
-                loss = loss_function(decoded, batch_embeddings, encoded, model)
-            
+
+                if USE_REWARD:
+                    sparsity_mask = (encoded != 0).float()
+                    reward = reward_function(
+                        reconstructed=decoded,
+                        original=batch_embeddings,
+                        sparsity_mask=sparsity_mask,
+                        lambda_sparsity=0.01
+                    )
+                    loss = -reward
+                else:
+                    apply_l1 = epoch >= SPARSITY_START_EPOCH
+                    loss = loss_function(decoded, batch_embeddings, encoded, model, apply_l1=apply_l1)
+
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
-            epoch_losses.append(min(loss.item(), 1))
-
-            
 
             loss_value = min(loss.item(), 1)
+            total_loss += loss.item()
             epoch_losses.append(loss_value)
-            
-            # Only accumulate activations every 10 steps to avoid frequent syncs
+
             if step % 10 == 0:
                 epoch_encoded_tensors.append(encoded.detach())
-                
-            # Throttle Visdom updates to every 100 steps
-            if step % 100 == 0:
-                current_avg = np.mean(epoch_losses[-100:]) if len(epoch_losses) >= 100 else np.mean(epoch_losses)
-                # vis.line(
-                #     Y=np.array([current_avg]),
-                #     X=np.array([step]),
-                #     win=vis_recon_loss,
-                #     update='append'
-                # )
+
+            # if step % 100 == 0:
+            #     current_avg = np.mean(epoch_losses[-100:]) if len(epoch_losses) >= 100 else np.mean(epoch_losses)
+            #     vis.line(
+            #         Y=np.array([current_avg]),
+            #         X=np.array([step]),
+            #         win=vis_recon_loss,
+            #         update='append'
+            #     )
             step += 1
-        
-        
+
         concat_encoded = torch.cat(epoch_encoded_tensors, dim=0)
         dead_latents = (concat_encoded == 0).all(dim=0)
         num_dead_latents = int(dead_latents.sum().item())
         dead_latents_per_epoch.append(num_dead_latents)
         print(f"Epoch {epoch+1} Dead Latents: {num_dead_latents}")
-        
+
         avg_epoch_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {avg_epoch_loss}")
+        if USE_REWARD:
+            print(f"Epoch {epoch+1}/{EPOCHS}, Reward (neg_loss): {-avg_epoch_loss:.4f}")
+        else:
+            print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {avg_epoch_loss:.4f}")
+
         save_model_checkpoint(epoch=epoch, model=model, optimizer=optimizer, dataset_size=len(dataset))
         plot_dead_latents(dead_latents_per_epoch=dead_latents_per_epoch)
 
-    
-        # vis.line(
-        #     Y=np.array([num_dead_latents]),
-        #     X=np.array([epoch]),
-        #     win=vis_dead_latents,
-        #     update='append'
-        # )
-    
-    print(dead_latents_per_epoch)
     print("\nEvaluating on Validation Set")
-    model.eval()
-    val_loss = 0.0
+    val_score = 0.0
     with torch.no_grad():
         for batch in tqdm(val_loader, desc="Validation"):
             batch_embeddings, _, _ = batch
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             encoded, decoded = model(batch_embeddings)
-            loss = loss_function(decoded, batch_embeddings, encoded, model)
-            val_loss += loss.item()
-    print(f"Validation Loss: {val_loss / len(val_loader)}")
-    
+
+            if USE_REWARD:
+                sparsity_mask = (encoded != 0).float()
+                score = reward_function(
+                    reconstructed=decoded,
+                    original=batch_embeddings,
+                    sparsity_mask=sparsity_mask,
+                    lambda_sparsity=LAMBDA
+                )
+            else:
+                score = -loss_function(decoded, batch_embeddings, encoded, model)
+
+            val_score += score.item()
+    print(f"Avg Validation {'Reward' if USE_REWARD else 'Loss'}: {val_score / len(val_loader):.4f}")
+
     print("\nEvaluating on Test Set")
-    test_loss = 0.0
+    test_score = 0.0
     with torch.no_grad():
         for batch in tqdm(test_loader, desc="Test"):
             batch_embeddings, _, _ = batch
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             encoded, decoded = model(batch_embeddings)
-            loss = loss_function(decoded, batch_embeddings, encoded, model)
-            test_loss += loss.item()
-    print(f"Test Loss: {test_loss / len(test_loader)}")
+
+            if USE_REWARD:
+                sparsity_mask = (encoded != 0).float()
+                score = reward_function(
+                    reconstructed=decoded,
+                    original=batch_embeddings,
+                    sparsity_mask=sparsity_mask,
+                    lambda_sparsity=LAMBDA
+                )
+            else:
+                score = -loss_function(decoded, batch_embeddings, encoded, model)
+
+            test_score += score.item()
+    print(f"Avg Test {'Reward' if USE_REWARD else 'Loss'}: {test_score / len(test_loader):.4f}")
+
 
     print("\nSaving SAE data for interpretability...")
     save_sae_data_for_interpretability(
