@@ -1,64 +1,91 @@
 # Growth-Signals
 
-[![Release](https://img.shields.io/github/v/release/raoabdulhannan/Growth-Signals)](https://img.shields.io/github/v/release/raoabdulhannan/Growth-Signals)
-[![Build status](https://img.shields.io/github/actions/workflow/status/AnanyaHN27/Growth-Signals/main.yml?branch=main)](https://github.com/raoabdulhannan/Growth-Signals/actions/workflows/main.yml?query=branch%3Amain)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/raoabdulhannan/Growth-Signals)](https://img.shields.io/github/commit-activity/m/raoabdulhannan/Growth-Signals)
 [![License](https://img.shields.io/github/license/raoabdulhannan/Growth-Signals)](https://img.shields.io/github/license/raoabdulhannan/Growth-Signals)
 
-CMU x Growth Signals Capstone
+# Sparse Autoencoder for Interpretable Wikipedia Embeddings
 
-- **Github repository**: <https://github.com/raoabdulhannan/Growth-Signals/>
+This project trains a Sparse Autoencoder (SAE) on paragraph-level embeddings from the Cohere Wikipedia 22-12 dataset. The goal is to extract interpretable latent features that correspond to distinct semantic concepts. These features can be automatically interpreted using a large language model (LLM). The repository includes modules for training, hyperparameter tuning, visualization, and model interpretation.
 
-## Getting started with your project
+## Features
 
-### 1. Create a New Repository
+- Sparse Autoencoder implemented in PyTorch with L1 or reinforcement learning-based sparsity
+- Automatic neuron interpretation using max and zero-activating examples with an LLM
+- Visualization tools for inspecting latent dimensions, activation patterns, and similarities
+- Interactive exploratory data analysis dashboard using Streamlit
+- Hyperparameter tuning via Bayesian optimization
+- Uses 768-dimensional Cohere multilingual-22-12 paragraph embeddings
 
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
+## Project Structure
 
-```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:AnanyaHN27/Growth-Signals.git
-git push -u origin main
-```
+| File | Description |
+|------|-------------|
+| `sae.py` | SAE architecture and sparsity-based loss/reward functions |
+| `training.py` | Full training loop with checkpointing and interpretability data export |
+| `llm_score.py` | Language model-based interpretation and prediction of neuron behavior |
+| `plot_latent_space.py` | Visualizations of re-ranked latent vectors and heatmaps |
+| `custom_dataset.py` | Loads and batches data from the Cohere Wikipedia embeddings |
+| `constants.py` | Global hyperparameter definitions |
+| `hyperparameter_tuning.py` | Hyperparameter optimization using `skopt` |
+| `dashboard.py` | Streamlit-based interactive exploration of Wikipedia embedding space |
 
-### 2. Set Up Your Development Environment
+## Training
 
-Then, install the environment and the pre-commit hooks with
-
-```bash
-make install
-```
-
-This will also generate your `uv.lock` file
-
-### 3. Run the pre-commit hooks
-
-Initially, the CI/CD pipeline might be failing due to formatting issues. To resolve those run:
+To train the SAE:
 
 ```bash
-uv run pre-commit run -a
+python training.py
 ```
 
-### 4. Commit the changes
+This script:
+- Loads the dataset (default: 100,000 samples)
+- Trains the model for 10 epochs
+- Applies either L1 or reward-based sparsity depending on the USE_REWARD flag
+- Saves interpretability data (top-k, zero-k, and random-k activations)
 
-Lastly, commit the changes made by the two steps above to your repository.
+## Interpretation with LLM
+
+To generate and evaluate interpretations of the learned features:
 
 ```bash
-git add .
-git commit -m 'Fix formatting issues'
-git push origin main
+python llm_score.py --sae_data_dir ./sae_data --model_name meta-llama/Llama-2-7b-chat
 ```
 
-You are now ready to start development on your project!
-The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
+This will:
+- Load top-activating and zero-activating examples for each neuron
+- Prompt an LLM to extract human-readable interpretations
+- Evaluate interpretability quality via F1 and correlation metrics
 
-To finalize the set-up for publishing to PyPI, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/codecov/).
+## Visualization
 
-## Releasing a new version
+- `plot_latent_space.py` generates re-ranked vector plots and activation similarity heatmaps
+- `dashboard.py` provides a browser-based interface for exploratory analysis using PCA, t-SNE, UMAP, and clustering
+
+To launch the dashboard:
+
+```bash
+streamlit run dashboard.py
+```
+
+## Hyperparameter Tuning
+
+To run Bayesian optimization for tuning learning rate, sparsity strength, hidden size, and decoder activation:
+
+```bash
+python hyperparameter_tuning.py
+```
+
+This uses skopt.gp_minimize to identify the best configuration based on reconstruction loss.
+
+## Dependencies
+
+Required packages include:
+- torch, transformers, datasets, numpy, matplotlib, scikit-learn, streamlit, scipy, plotly, skopt, umap-learn, tqdm
+- Optional: visdom for live training visualizations
+
+## License
+
+This project is released under the MIT License. See LICENSE for details.
 
 
 
