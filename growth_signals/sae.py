@@ -52,8 +52,19 @@ class SAE(nn.Module):
         return self.lambda_coef * kl_loss
 
 
-def loss_function(reconstructed, original, encoded, model):
-    # Alternate approach is MAE, which is more robust to outliers but less used in the literature 
+def loss_function(reconstructed, original, encoded, model, apply_l1=True):
     mse_loss = nn.MSELoss()(reconstructed, original)
-    kl_loss = model.l1_loss_function(encoded)
-    return mse_loss + kl_loss
+    if apply_l1:
+        l1_loss = model.l1_loss_function(encoded)
+        return mse_loss + l1_loss
+    else:
+        return mse_loss
+
+
+def reward_function(reconstructed, original, sparsity_mask, lambda_sparsity):
+    mse_loss = nn.MSELoss()(reconstructed, original)
+    sparsity_penalty = lambda_sparsity * torch.sum(sparsity_mask)  # Fewer active neurons = better
+    diversity_loss = -torch.var(sparsity_mask)  # Encourage diverse activation patterns
+
+    reward = -mse_loss - sparsity_penalty + diversity_loss  # Maximize reward
+    return reward

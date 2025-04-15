@@ -4,12 +4,17 @@ from datasets import load_dataset
 from constants import EMBEDDING_DIM, BATCH_SIZE
 
 class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, path="Cohere/wikipedia-22-12-en-embeddings"):
+    def __init__(self, path="Cohere/wikipedia-22-12-en-embeddings", num_rows=100000, shuffle=False):
         print("Loading data")
         self.dataset = load_dataset(path, split="train", streaming=False)
-        # self.dataset = self.dataset.shuffle(seed=42)
-        self.dataset = self.dataset.select(range(100000))
-        print("Loaded and shuffled dataset")
+        if shuffle:
+            self.dataset = self.dataset.shuffle(seed=42)
+            print(f"Loaded and shuffled dataset")
+        else:
+            print(f"Loaded dataset without shuffling")
+        
+        self.dataset = self.dataset.select(range(num_rows))
+        print(f"Selected {num_rows} rows from dataset")
         self.embedding_dim = EMBEDDING_DIM
         self.batch_size = BATCH_SIZE
         self.dataset.set_format(type="numpy", columns=["emb", "text", "title"])
@@ -24,8 +29,9 @@ class CustomDataset(torch.utils.data.Dataset):
             for d in batch
         ]
         texts = [d['text'] for d in batch]
+        titles = [d['title'] for d in batch]
         embeddings = np.stack(embeddings_list, axis=0)
-        return torch.from_numpy(embeddings), texts
+        return torch.from_numpy(embeddings), texts, titles
 
     def __iter__(self):
         batch = []

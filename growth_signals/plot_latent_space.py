@@ -95,4 +95,3 @@ def plot_rank_correlation_heatmap(re_ranked_vectors, titles, epoch, step, save_d
                                       f"combined_heatmaps_epoch_{epoch}_step_{step}.png")
     plt.savefig(combined_filename, bbox_inches="tight")
     plt.close()
-
