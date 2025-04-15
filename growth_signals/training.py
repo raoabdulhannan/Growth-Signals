@@ -10,12 +10,14 @@ import requests
 import heapq
 import json
 import gc
+import matplotlib.pyplot as plt
 
 from constants import HIDDEN_DIM, INPUT_DIM, BATCH_SIZE, EMBEDDING_DIM, EPOCHS, LR, LAMBDA, SPARSITY_START_EPOCH
 from plot_latent_space import plot_re_ranked_vectors
 from custom_dataset import CustomDataset
 from sae import SAE, loss_function, reward_function
 from plot import plot_dead_latents
+from plot_latent_space import plot_re_ranked_vectors
 
 USE_REWARD = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -212,12 +214,12 @@ def main():
     # Wait for the Visdom server to start
     # wait_for_visdom()
     # vis = visdom.Visdom(port=8097)
-    # vis_recon_loss = vis.line(
+    # vis_loss_plot = vis.line(
     #     Y=np.array([0]), X=np.array([0]),
-    #     opts=dict(title='Reconstruction Loss',
+    #     opts=dict(title='Training and Test Loss',
     #               xlabel='Step', ylabel='Loss',
-    #               width=800, height=400)
-    # )
+    #               legend=['Training Loss', 'Test Loss'],
+    #               width=800, height=400))
     # vis_dead_latents = vis.line(
     #     Y=np.array([0]), X=np.array([0]),
     #     opts=dict(title='Dead Latents',
@@ -239,6 +241,7 @@ def main():
                             persistent_workers=True, pin_memory=True)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, num_workers=4,
                              persistent_workers=True, pin_memory=True)
+    test_iter = iter(test_loader)
     print(f"\nData processed: {type(train_loader)}")
     
     model = SAE(
@@ -253,15 +256,21 @@ def main():
     
     optimizer = optim.Adam(model.parameters(), lr=LR)
     print("\nOptimizer loaded")
+
+    sample_indices = torch.randperm(len(train_dataset))[:10]
+    sample_data = [train_dataset[i] for i in sample_indices]
+    sample_embeddings = torch.stack([data[0] for data in sample_data]).to(device)
+    sample_titles = [data[2] for data in sample_data]
     
     dead_latents_per_epoch = []
     step = 0
     for epoch in tqdm(range(EPOCHS), desc="Training Progress"):
         total_loss = 0
         epoch_losses = []
+        epoch_test_losses = []
         epoch_encoded_tensors = []
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}", leave=False):
-            batch_embeddings, _, _ = batch
+            batch_embeddings, _, batch_titles = batch
             batch_embeddings = batch_embeddings.to(device, non_blocking=True)
             optimizer.zero_grad()
 
@@ -284,23 +293,63 @@ def main():
             loss.backward()
             optimizer.step()
 
-            loss_value = min(loss.item(), 1)
             total_loss += loss.item()
-            epoch_losses.append(loss_value)
+            epoch_losses.append(loss.item())
 
+            # Evaluate on a batch from the test set
+            try:
+                test_batch = next(test_iter)
+            except StopIteration:
+                test_iter = iter(test_loader)
+                test_batch = next(test_iter)
+            test_embeddings, _, _ = test_batch
+            test_embeddings = test_embeddings.to(device, non_blocking=True)
+            with torch.no_grad():
+                test_encoded, test_decoded = model(test_embeddings)
+                test_loss = loss_function(test_decoded, test_embeddings, test_encoded, model).item()
+                epoch_test_losses.append(test_loss)
+
+            # # Update Visdom plot for reconstruction loss
+            # if step > 1000:
+            #     vis.line(Y=np.array([epoch_losses[-1000:], epoch_test_losses[-1000:]]),
+            #              X=np.array(range(step-999, step+1)),
+            #              win=vis_loss_plot, update='replace')
+            # else:
+            #     vis.line(Y=np.array([epoch_losses, epoch_test_losses]),
+            #              X=np.array(range(step-len(epoch_losses)+1, step+1)),
+            #              win=vis_loss_plot, update='replace')
+
+            # Only accumulate activations every 10 steps to avoid frequent syncs
             if step % 10 == 0:
                 epoch_encoded_tensors.append(encoded.detach())
-
+                
+            # Throttle Visdom updates to every 100 steps
             # if step % 100 == 0:
             #     current_avg = np.mean(epoch_losses[-100:]) if len(epoch_losses) >= 100 else np.mean(epoch_losses)
-            #     vis.line(
-            #         Y=np.array([current_avg]),
-            #         X=np.array([step]),
-            #         win=vis_recon_loss,
-            #         update='append'
-            #     )
+                # vis.line(
+                #     Y=np.array([current_avg]),
+                #     X=np.array([step]),
+                #     win=vis_recon_loss,
+                #     update='append'
+                # )
             step += 1
+        
+        with torch.no_grad():
+            sample_encoded, _ = model(sample_embeddings)
+            plot_re_ranked_vectors(sample_encoded, sample_titles, epoch + 1, step)
 
+        # Save training and testing loss plot
+        os.makedirs("loss_plots", exist_ok=True)
+        plt.figure()
+        plt.plot(range(len(epoch_losses)), epoch_losses, label="Training Loss", color="blue")
+        plt.plot(range(len(epoch_test_losses)), epoch_test_losses, label="Test Loss", color="orange")
+        plt.title(f"Epoch {epoch+1} Loss")
+        plt.xlabel("Batch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.savefig(f"loss_plots/epoch_{epoch+1}_loss.png")
+        plt.close()
+        
         concat_encoded = torch.cat(epoch_encoded_tensors, dim=0)
         dead_latents = (concat_encoded == 0).all(dim=0)
         num_dead_latents = int(dead_latents.sum().item())
@@ -314,7 +363,7 @@ def main():
             print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {avg_epoch_loss:.4f}")
 
         save_model_checkpoint(epoch=epoch, model=model, optimizer=optimizer, dataset_size=len(dataset))
-        plot_dead_latents(dead_latents_per_epoch=dead_latents_per_epoch)
+        # plot_dead_latents(dead_latents_per_epoch=dead_latents_per_epoch)
 
     print("\nEvaluating on Validation Set")
     val_score = 0.0
