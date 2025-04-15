@@ -20,14 +20,14 @@ This project trains a Sparse Autoencoder (SAE) on paragraph-level embeddings fro
 
 | File | Description |
 |------|-------------|
-| `sae.py` | SAE architecture and sparsity-based loss/reward functions |
-| `training.py` | Full training loop with checkpointing and interpretability data export |
-| `llm_score.py` | Language model-based interpretation and prediction of neuron behavior |
-| `plot_latent_space.py` | Visualizations of re-ranked latent vectors and heatmaps |
-| `custom_dataset.py` | Loads and batches data from the Cohere Wikipedia embeddings |
-| `constants.py` | Global hyperparameter definitions |
-| `hyperparameter_tuning.py` | Hyperparameter optimization using `skopt` |
-| `dashboard.py` | Streamlit-based interactive exploration of Wikipedia embedding space |
+| `growth_signals/sae.py` | SAE architecture and sparsity-based loss/reward functions |
+| `growth_signals/training.py` | Full training loop with checkpointing and interpretability data export |
+| `growth_signals/llm_score.py` | Language model-based interpretation and prediction of neuron behavior |
+| `growth_signals/plot_latent_space.py` | Visualizations of re-ranked latent vectors and heatmaps |
+| `growth_signals/custom_dataset.py` | Loads and batches data from the Cohere Wikipedia embeddings |
+| `growth_signals/constants.py` | Global hyperparameter definitions |
+| `growth_signals/hyperparameter_tuning.py` | Hyperparameter optimization using `skopt` |
+| `growth_signals/dashboard.py` | Streamlit-based interactive exploration of Wikipedia embedding space |
 
 ## Training
 
