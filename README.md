@@ -1,9 +1,7 @@
-# Growth-Signals
+# Growth Signals x CMU Capstone: Sparse Autoencoder
 
 [![Commit activity](https://img.shields.io/github/commit-activity/m/raoabdulhannan/Growth-Signals)](https://img.shields.io/github/commit-activity/m/raoabdulhannan/Growth-Signals)
 [![License](https://img.shields.io/github/license/raoabdulhannan/Growth-Signals)](https://img.shields.io/github/license/raoabdulhannan/Growth-Signals)
-
-# Sparse Autoencoder for Interpretable Wikipedia Embeddings
 
 This project trains a Sparse Autoencoder (SAE) on paragraph-level embeddings from the Cohere Wikipedia 22-12 dataset. The goal is to extract interpretable latent features that correspond to distinct semantic concepts. These features can be automatically interpreted using a large language model (LLM). The repository includes modules for training, hyperparameter tuning, visualization, and model interpretation.
 
